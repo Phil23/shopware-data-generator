@@ -1,0 +1,14 @@
+{
+  "name": "shopware-data-hydrator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "generate": "node --env-file=.env main.js"
+  },
+  "dependencies": {
+    "openai": "^4.28.0",
+    "axios": "^1.6.7"
+  }
+}

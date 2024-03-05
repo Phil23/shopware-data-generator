@@ -1,0 +1,13 @@
+# Vendor
+node_modules/
+
+# IDE
+.vscode/*
+/.idea/
+
+# System Files
+npm-debug.log
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Thumbs.db

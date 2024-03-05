@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "esModuleInterop": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {}
+  }
+}

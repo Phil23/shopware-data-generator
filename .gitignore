@@ -1,0 +1,16 @@
+node_modules/
+productImages/
+/.idea/
+/.fleet/
+*.http
+/.run/
+.vscode
+.env
+.env.local
+._*
+!**/.gitkeep
+npm-debug.log
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Thumbs.db

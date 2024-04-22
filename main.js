@@ -7,8 +7,11 @@ const clientId = process.env['SW_CLIENT_ID'];
 const clientSecret = process.env['SW_CLIENT_SECRET'];
 
 const category = process.env['npm_config_category'] || 'furniture';
+const productCount = process.env['npm_config_products'] || 10;
 
 const dataHydrator = new DataHydrator(openAiApiKey, swEnvUrl, clientId, clientSecret);
 
-const products = await dataHydrator.generateProducts(category);
+const products = await dataHydrator.generateProducts(category, productCount);
 await dataHydrator.hydrateEnvWithProducts(products, category);
+
+// await dataHydrator.hydrateEnvWithLogo(category);

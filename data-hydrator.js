@@ -5,7 +5,7 @@ import axios from 'axios';
 
 export class DataHydrator {
 
-    constructor(openAiApiKey, envPath, clientId, clientSecret) {
+    constructor(openAiApiKey, envPath, clientId, clientSecret, imageDir = './generatedImages') {
         if (!openAiApiKey.length || openAiApiKey.length <= 0) {
             console.error('Missing API key for OpenAI.');
         }
@@ -22,11 +22,11 @@ export class DataHydrator {
             baseURL: `${this.envPath}/api/`
         });
 
-        const imageDir = `./productImages`;
+        this.imageDir = imageDir;
 
-        if (!fs.existsSync(imageDir)) {
+        if (!fs.existsSync(this.imageDir)) {
             try {
-                fs.mkdirSync(imageDir);
+                fs.mkdirSync(this.imageDir);
             } catch (err) {
                 console.error(err);
             }
@@ -125,6 +125,20 @@ export class DataHydrator {
         return categoryResponse.data.data;
     }
 
+    createCategoryImageDir(category) {
+        const categoryImageDir = `${this.imageDir}/${category.replace(/[^a-zA-Z]/g, '')}`;
+
+        if (!fs.existsSync(categoryImageDir)) {
+            try {
+                fs.mkdirSync(categoryImageDir);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        return categoryImageDir;
+    }
+
     getProductDataScheme() {
         return {
             name: { type: 'string', description: 'The name of the product.' },
@@ -134,16 +148,16 @@ export class DataHydrator {
         }
     }
 
-    async generateProducts(category, productCount = 5) {
+    async generateProducts(category, productCount = 10) {
         const productScheme = this.getProductDataScheme();
-        const prompt = `Please create fake sample data for ${productCount} products of an online store in JSON format containing an array of objects. 
+        const prompt = `Create fake sample data for ${productCount} products of an online store in JSON format containing an array of objects. 
                               Each object should contain exactly the fields defined in this scheme ${JSON.stringify(productScheme)}. 
-                              The products should resemble items of the industry ${category}.`
+                              The products should resemble fake items of the industry ${category}, but no real-world brands.`
 
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: 'system', content: prompt }],
             model: 'gpt-3.5-turbo',
-            response_format: { type: "json_object" }
+            response_format: { type: 'json_object' }
         });
 
         let products = [];
@@ -161,19 +175,11 @@ export class DataHydrator {
     }
 
     async generateProductImages(products, category) {
-        const imageDir = `./productImages/${category.replace(/[^a-zA-Z]/g, '')}`;
-
-        if (!fs.existsSync(imageDir)) {
-            try {
-                fs.mkdirSync(imageDir);
-            } catch (err) {
-                console.error(err);
-            }
-        }
+        const categoryImageDir = this.createCategoryImageDir(category);
 
         return await Promise.all(products.map(async (product) => {
             const imageName = product.name.replace(/[^a-zA-Z]/g, '');
-            const imageFsPath= `${imageDir}/${imageName}.png`;
+            const imageFsPath= `${categoryImageDir}/${imageName}.png`;
 
             if (fs.existsSync(imageFsPath)) {
                 const imageBase64 = fs.readFileSync(imageFsPath, { encoding: 'base64' });
@@ -187,17 +193,29 @@ export class DataHydrator {
                 return product;
             }
 
-            const prompt= `Create a fake product image for an online store which shows a realistic separated product on a white background without text
-                                 that matches the name: ${product.name} and description: ${product.description}.`;
+            // const prompt= `Create a fake product image for an online store which shows a realistic separated product on a white background without text
+            //                      that matches the name: ${product.name} and description: ${product.description}.`;
+            const prompt= `Create a photo-realistic fake product image separated on a white background without text or other elements 
+                                 that matches the name ${product.name} from the category ${category}.`;
 
-            const imageResponse= await this.openAI.images.generate({
-                model: 'dall-e-3',
-                prompt: prompt,
-                size: '1024x1024',
-                response_format: 'b64_json',
-                n: 1
-            });
-            const imageBase64= imageResponse.data[0]['b64_json'];
+            let imageBase64 = '';
+
+            try {
+                const imageResponse= await this.openAI.images.generate({
+                    model: 'dall-e-3',
+                    prompt: prompt,
+                    size: '1024x1024',
+                    response_format: 'b64_json',
+                    n: 1
+                });
+                imageBase64= imageResponse.data[0]['b64_json'];
+            } catch (e) {
+                console.warn(e);
+            }
+
+            if (!imageBase64.length > 0) {
+                return product;
+            }
 
             if (!fs.existsSync(imageFsPath)) {
                 try {
@@ -219,6 +237,48 @@ export class DataHydrator {
         }));
     }
 
+    async generateLogo(category) {
+        const categoryImageDir = this.createCategoryImageDir(category);
+
+        const imageName = `logo-${category.replace(/[^a-zA-Z]/g, '')}`;
+        const imageFsPath= `${categoryImageDir}/${imageName}.png`;
+
+        const prompt = `An emblem for a fake ${category} brand including the text "${category}", horizontal, clean, simple, vector, pure white #ffffff background.`
+
+        const imageResponse= await this.openAI.images.generate({
+            model: 'dall-e-3',
+            prompt: prompt,
+            size: '1024x1024',
+            response_format: 'b64_json',
+            n: 1
+        });
+        const imageBase64= imageResponse.data[0]['b64_json'];
+
+        if (!fs.existsSync(imageFsPath)) {
+            try {
+                fs.writeFileSync(imageFsPath, imageBase64, 'base64', { flag: 'a' });
+            } catch (err) {
+                console.error(err);
+            }
+        } else {
+            console.warn('Image already exists.');
+        }
+
+        return {
+            imageName: imageName,
+            image: imageBase64,
+            type: '.png'
+        };
+    }
+
+    async hydrateEnvWithLogo(logoImage) {
+        await this.authenticateApiClientWithCredentials();
+
+        const salesChannel = await this.getStandardSalesChannel();
+
+        console.log(salesChannel);
+    }
+
     async hydrateEnvWithProducts(products, category) {
         await this.authenticateApiClientWithCredentials();
 
@@ -233,20 +293,7 @@ export class DataHydrator {
         const productPayload = products.map((p) => {
             const UUID = this.createUUID();
 
-            const mediaId = this.createUUID();
-            const productMediaId = this.createUUID();
-
-            mediaUploads.push({
-                id: mediaId,
-                image: p.image
-            });
-
-            mediaPayload.push({
-                id: mediaId,
-                private: false
-            });
-
-            return {
+            const product = {
                 id: UUID,
                 productNumber: `AI-${UUID}`,
                 name: p.name,
@@ -259,13 +306,6 @@ export class DataHydrator {
                     net: p.price,
                     linked: true
                 }],
-                coverId: productMediaId,
-                media: [{
-                    id: productMediaId,
-                    media: {
-                        id: mediaId
-                    },
-                }],
                 visibilities: [{
                     productId: UUID,
                     salesChannelId: salesChannel.id,
@@ -277,6 +317,31 @@ export class DataHydrator {
                     id: productCategory.id
                 }]
             }
+
+            if (p.image) {
+                const mediaId = this.createUUID();
+                const productMediaId = this.createUUID();
+
+                mediaUploads.push({
+                    id: mediaId,
+                    image: p.image
+                });
+
+                mediaPayload.push({
+                    id: mediaId,
+                    private: false
+                });
+
+                product.coverId = productMediaId;
+                product.media = [{
+                    id: productMediaId,
+                    media: {
+                        id: mediaId
+                    },
+                }];
+            }
+
+            return product;
         });
 
         const productResponse = await this.apiClient.post('_action/sync', {

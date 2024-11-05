@@ -10,7 +10,7 @@ export class DataHydrator {
             console.error('Missing API key for OpenAI.');
         }
 
-        this.envPath = envPath;
+        this.envPath = envPath || 'http://localhost:8000';
         this.apiClientId = clientId;
         this.apiClientSecret = clientSecret;
 
@@ -42,18 +42,32 @@ export class DataHydrator {
     }
 
     async authenticateApiClientWithCredentials() {
-        const authResponse = await this.apiClient.post('oauth/token', {
-            grant_type: 'client_credentials',
-            client_id: this.apiClientId,
-            client_secret: this.apiClientSecret,
-            scope: ['write']
-        });
+        let authResponse;
+
+        if (this.apiClientId && this.apiClientSecret) {
+            authResponse = await this.apiClient.post('oauth/token', {
+                grant_type: 'client_credentials',
+                client_id: this.apiClientId,
+                client_secret: this.apiClientSecret,
+                scope: ['write']
+            });
+        } else {
+            // Fallback for dev mode to standard admin user.
+            authResponse = await this.apiClient.post('oauth/token', {
+                client_id: 'administration',
+                grant_type: 'password',
+                username: 'admin',
+                password: 'shopware',
+                scope: ['write'],
+            });
+        }
 
         if (!authResponse.data['access_token']) {
             console.error('Authentication failed.');
             console.log(authResponse);
 
             this.apiClientAccessToken = null;
+            return false;
         }
 
         this.apiClientAccessToken = authResponse.data['access_token'];

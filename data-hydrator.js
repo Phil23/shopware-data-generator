@@ -5,22 +5,16 @@ import axios from 'axios';
 
 export class DataHydrator {
 
-    constructor(openAiApiKey, envPath, clientId, clientSecret, imageDir = './generatedImages') {
+    constructor(openAiApiKey, imageDir = './generatedImages') {
         if (!openAiApiKey.length || openAiApiKey.length <= 0) {
             console.error('Missing API key for OpenAI.');
         }
-
-        this.envPath = envPath || 'http://localhost:8000';
-        this.apiClientId = clientId;
-        this.apiClientSecret = clientSecret;
 
         this.openAI = new OpenAI({
             apiKey: openAiApiKey
         });
 
-        this.apiClient = axios.create({
-            baseURL: `${this.envPath}/api/`
-        });
+        this.apiClient = axios.create();
 
         this.imageDir = imageDir;
 
@@ -41,8 +35,17 @@ export class DataHydrator {
         return string.charAt(0).toUpperCase() + string.slice(1);
     }
 
-    async authenticateApiClientWithCredentials() {
+    async authenticateWithClientCredentials(envPath, clientId, clientSecret) {
         let authResponse;
+
+        this.envPath = envPath || 'http://localhost:8000';
+        this.apiClientId = clientId;
+        this.apiClientSecret = clientSecret;
+        this.authenticationType = 'client';
+
+        this.apiClient = axios.create({
+            baseURL: `${this.envPath}/api/`
+        });
 
         if (this.apiClientId && this.apiClientSecret) {
             authResponse = await this.apiClient.post('oauth/token', {
@@ -72,6 +75,39 @@ export class DataHydrator {
 
         this.apiClientAccessToken = authResponse.data['access_token'];
         this.apiClient.defaults.headers.common['Authorization'] = 'Bearer ' + this.apiClientAccessToken;
+    }
+
+    async authenticateWithUserCredentials(envPath, userName, password) {
+        if (!userName || !password) {
+            this.apiClientAccessToken = null;
+            return false;
+        }
+
+        this.envPath = envPath || 'http://localhost:8000';
+        this.userName = userName;
+        this.password = password;
+        this.authenticationType = 'user';
+
+        this.apiClient = axios.create({
+            baseURL: `${this.envPath}/api/`
+        });
+
+        const authResponse = await this.apiClient.post('oauth/token', {
+            client_id: 'administration',
+            grant_type: 'password',
+            username: userName,
+            password: password,
+            scope: ['write'],
+        });
+
+        if (!authResponse.data['access_token']) {
+            this.apiClientAccessToken = null;
+            return false;
+        }
+
+        this.apiClientAccessToken = authResponse.data['access_token'];
+        this.apiClient.defaults.headers.common['Authorization'] = 'Bearer ' + this.apiClientAccessToken;
+        return true;
     }
 
     async getCurrencyId(currency = 'EUR') {
@@ -134,8 +170,6 @@ export class DataHydrator {
             active: true
         });
 
-        console.log(categoryResponse.data);
-
         return categoryResponse.data.data;
     }
 
@@ -163,6 +197,8 @@ export class DataHydrator {
     }
 
     async generateProducts(category, productCount = 10) {
+        console.log(`Generating product data ...`);
+
         const productScheme = this.getProductDataScheme();
         const prompt = `Create fake sample data for ${productCount} products of an online store in JSON format containing an array of objects. 
                               Each object should contain exactly the fields defined in this scheme ${JSON.stringify(productScheme)}. 
@@ -183,12 +219,14 @@ export class DataHydrator {
             console.error(e);
         }
 
-        console.log(products);
+        console.log(`Data for ${products.length} products was generated successfully.`);
 
         return await this.generateProductImages(products, category);
     }
 
     async generateProductImages(products, category) {
+        console.log('Generating product images ...');
+
         const categoryImageDir = this.createCategoryImageDir(category);
 
         return await Promise.all(products.map(async (product) => {
@@ -241,6 +279,8 @@ export class DataHydrator {
                 console.warn('Image already exists.');
             }
 
+            console.log(`Image for product ${product.name} generated successfully.`);
+
             product.image = {
                 name: imageName,
                 type: '.png',
@@ -286,7 +326,10 @@ export class DataHydrator {
     }
 
     async hydrateEnvWithLogo(logoImage) {
-        await this.authenticateApiClientWithCredentials();
+        if (!this.apiClientAccessToken) {
+            console.error('Client is not authenticated.');
+            return false;
+        }
 
         const salesChannel = await this.getStandardSalesChannel();
 
@@ -294,7 +337,10 @@ export class DataHydrator {
     }
 
     async hydrateEnvWithProducts(products, category) {
-        await this.authenticateApiClientWithCredentials();
+        if (!this.apiClientAccessToken) {
+            console.error('Client is not authenticated.');
+            return false;
+        }
 
         const currencyId = await this.getCurrencyId();
         const taxId = await this.getStandardTaxId();
@@ -371,6 +417,8 @@ export class DataHydrator {
             }
         });
 
+        console.log('Product Create Response', productResponse.status);
+
         const mediaResponse = await Promise.all(mediaUploads.map(async (media) => {
             return await this.apiClient.post(
                 `_action/media/${media.id}/upload?extension=png&fileName=${media.image.name}-${media.id}`,
@@ -382,5 +430,7 @@ export class DataHydrator {
                 }
             );
         }));
+
+        return productResponse.status;
     }
 }

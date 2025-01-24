@@ -5,10 +5,12 @@
   "type": "module",
   "main": "main.js",
   "scripts": {
-    "generate": "node --env-file=.env main.js"
+    "generate": "node --env-file=.env main.js",
+    "server": "node --env-file=.env server.js"
   },
   "dependencies": {
-    "openai": "^4.28.0",
-    "axios": "^1.6.7"
+    "openai": "^4.80.0",
+    "axios": "^1.7.9",
+    "express": "^4.21.2"
   }
 }

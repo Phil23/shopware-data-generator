@@ -52,7 +52,7 @@ export class DataHydrator {
                 grant_type: 'client_credentials',
                 client_id: this.apiClientId,
                 client_secret: this.apiClientSecret,
-                scope: ['write']
+                scope: 'write',
             });
         } else {
             // Fallback for dev mode to standard admin user.
@@ -61,7 +61,7 @@ export class DataHydrator {
                 grant_type: 'password',
                 username: 'admin',
                 password: 'shopware',
-                scope: ['write'],
+                scope: 'write',
             });
         }
 
@@ -97,7 +97,7 @@ export class DataHydrator {
             grant_type: 'password',
             username: userName,
             password: password,
-            scope: ['write'],
+            scope: 'write',
         });
 
         if (!authResponse.data['access_token']) {

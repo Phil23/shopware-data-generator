@@ -1,30 +1,10 @@
-import OpenAI from 'openai';
-import fs from 'node:fs';
 import crypto from 'node:crypto';
 import axios from 'axios';
 
 export class DataHydrator {
 
-    constructor(openAiApiKey, imageDir = './generatedImages') {
-        if (!openAiApiKey.length || openAiApiKey.length <= 0) {
-            console.error('Missing API key for OpenAI.');
-        }
-
-        this.openAI = new OpenAI({
-            apiKey: openAiApiKey
-        });
-
+    constructor() {
         this.apiClient = axios.create();
-
-        this.imageDir = imageDir;
-
-        if (!fs.existsSync(this.imageDir)) {
-            try {
-                fs.mkdirSync(this.imageDir);
-            } catch (err) {
-                console.error(err);
-            }
-        }
     }
 
     createUUID() {
@@ -173,167 +153,33 @@ export class DataHydrator {
         return categoryResponse.data.data;
     }
 
-    createCategoryImageDir(category) {
-        const categoryImageDir = `${this.imageDir}/${category.replace(/[^a-zA-Z]/g, '')}`;
-
-        if (!fs.existsSync(categoryImageDir)) {
-            try {
-                fs.mkdirSync(categoryImageDir);
-            } catch (err) {
-                console.error(err);
-            }
-        }
-
-        return categoryImageDir;
-    }
-
-    getProductDataScheme() {
-        return {
-            name: { type: 'string', description: 'The name of the product.' },
-            description: { type: 'string', description: 'A text describing the features of the product with minimum 80 words.' },
-            price: { type: 'float', description: 'The price of the product.' },
-            stock: { type: 'integer', description: 'Indicates the number of products available.' }
-        }
-    }
-
-    async generateProducts(category, productCount = 10) {
-        console.log(`Generating product data ...`);
-
-        const productScheme = this.getProductDataScheme();
-        const prompt = `Create fake sample data for ${productCount} products of an online store in JSON format containing an array of objects. 
-                              Each object should contain exactly the fields defined in this scheme ${JSON.stringify(productScheme)}. 
-                              The products should resemble fake items of the industry ${category}, but no real-world brands.`
-
-        const completion = await this.openAI.chat.completions.create({
-            messages: [{ role: 'system', content: prompt }],
-            model: 'gpt-3.5-turbo',
-            response_format: { type: 'json_object' }
-        });
-
-        let products = [];
-
-        try {
-            const parsedResponse = JSON.parse(completion.choices[0].message.content);
-            products = parsedResponse.products;
-        } catch(e) {
-            console.error(e);
-        }
-
-        console.log(`Data for ${products.length} products was generated successfully.`);
-
-        return await this.generateProductImages(products, category);
-    }
-
-    async generateProductImages(products, category) {
-        console.log('Generating product images ...');
-
-        const categoryImageDir = this.createCategoryImageDir(category);
-
-        return await Promise.all(products.map(async (product) => {
-            const imageName = product.name.replace(/[^a-zA-Z]/g, '');
-            const imageFsPath= `${categoryImageDir}/${imageName}.png`;
-
-            if (fs.existsSync(imageFsPath)) {
-                const imageBase64 = fs.readFileSync(imageFsPath, { encoding: 'base64' });
-
-                product.image = {
-                    name: imageName,
-                    type: '.png',
-                    data: imageBase64
-                };
-
-                return product;
-            }
-
-            // const prompt= `Create a fake product image for an online store which shows a realistic separated product on a white background without text
-            //                      that matches the name: ${product.name} and description: ${product.description}.`;
-            const prompt= `Create a photo-realistic fake product image separated on a white background without text or other elements 
-                                 that matches the name ${product.name} from the category ${category}.`;
-
-            let imageBase64 = '';
-
-            try {
-                const imageResponse= await this.openAI.images.generate({
-                    model: 'dall-e-3',
-                    prompt: prompt,
-                    size: '1024x1024',
-                    response_format: 'b64_json',
-                    n: 1
-                });
-                imageBase64= imageResponse.data[0]['b64_json'];
-            } catch (e) {
-                console.warn(e);
-            }
-
-            if (!imageBase64.length > 0) {
-                return product;
-            }
-
-            if (!fs.existsSync(imageFsPath)) {
-                try {
-                    fs.writeFileSync(imageFsPath, imageBase64, 'base64', { flag: 'a' });
-                } catch (err) {
-                    console.error(err);
-                }
-            } else {
-                console.warn('Image already exists.');
-            }
-
-            console.log(`Image for product ${product.name} generated successfully.`);
-
-            product.image = {
-                name: imageName,
-                type: '.png',
-                data: imageBase64
-            };
-
-            return product;
-        }));
-    }
-
-    async generateLogo(category) {
-        const categoryImageDir = this.createCategoryImageDir(category);
-
-        const imageName = `logo-${category.replace(/[^a-zA-Z]/g, '')}`;
-        const imageFsPath= `${categoryImageDir}/${imageName}.png`;
-
-        const prompt = `An emblem for a fake ${category} brand including the text "${category}", horizontal, clean, simple, vector, pure white #ffffff background.`
-
-        const imageResponse= await this.openAI.images.generate({
-            model: 'dall-e-3',
-            prompt: prompt,
-            size: '1024x1024',
-            response_format: 'b64_json',
-            n: 1
-        });
-        const imageBase64= imageResponse.data[0]['b64_json'];
-
-        if (!fs.existsSync(imageFsPath)) {
-            try {
-                fs.writeFileSync(imageFsPath, imageBase64, 'base64', { flag: 'a' });
-            } catch (err) {
-                console.error(err);
-            }
-        } else {
-            console.warn('Image already exists.');
-        }
-
-        return {
-            imageName: imageName,
-            image: imageBase64,
-            type: '.png'
-        };
-    }
-
-    async hydrateEnvWithLogo(logoImage) {
+    async hydrateEnvWithPropertyGroups(propertyGroups) {
         if (!this.apiClientAccessToken) {
             console.error('Client is not authenticated.');
             return false;
         }
 
-        const salesChannel = await this.getStandardSalesChannel();
+        const propertyGroupsPayload = propertyGroups.map((group) => {
+            const UUID = this.createUUID();
 
-        console.log(salesChannel);
+            return {
+                id: UUID,
+                name: group.name,
+                description: group.description,
+                displayType: group.displayType,
+                options: group.options
+            }
+        });
+
+        const propertyGroupResponse = await this.apiClient.post('_action/sync', {
+            'hydratePropertyGroups': {
+                entity: 'property_group',
+                action: 'upsert',
+                payload: propertyGroupsPayload
+            }
+        });
+
+        console.log('Property Group Response', propertyGroupResponse.status);
     }
 
     async hydrateEnvWithProducts(products, category) {
@@ -376,6 +222,13 @@ export class DataHydrator {
                 }, {
                     id: productCategory.id
                 }]
+            }
+
+            if (p.productReviews) {
+                product.productReviews = p.productReviews.map((review) => {
+                    review.salesChannelId = salesChannel.id;
+                    return review;
+                });
             }
 
             if (p.image) {

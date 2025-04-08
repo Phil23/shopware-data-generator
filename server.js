@@ -1,10 +1,12 @@
 import express from "express";
 import { DataHydrator } from "./data-hydrator.js";
+import { DataGenerator } from "./data-generator.js";
 
 const openAiApiKey = process.env['OPENAI_API_KEY'];
 const port = process.env['SERVER_PORT'] || 3000;
 
-const dataHydrator = new DataHydrator(openAiApiKey);
+const dataHydrator = new DataHydrator();
+const dataGenerator = new DataGenerator(openAiApiKey)
 const app = express();
 
 app.use(express.json());
@@ -43,7 +45,7 @@ app.post('/generate', async (request, response) => {
     let products = [];
 
     try {
-        products = await dataHydrator.generateProducts(productCategory, productCount);
+        products = await dataGenerator.generateProducts(productCategory, true, true, productCount);
     } catch (e) {
         response.status(500).send(e);
         return;

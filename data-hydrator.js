@@ -160,14 +160,17 @@ export class DataHydrator {
         }
 
         const propertyGroupsPayload = propertyGroups.map((group) => {
-            const UUID = this.createUUID();
-
             return {
-                id: UUID,
+                id: this.createUUID(),
                 name: group.name,
                 description: group.description,
                 displayType: group.displayType,
-                options: group.options
+                options: group.options.map((option) => {
+                    return {
+                        id: this.createUUID(),
+                        ...option
+                    }
+                })
             }
         });
 
@@ -180,6 +183,8 @@ export class DataHydrator {
         });
 
         console.log('Property Group Response', propertyGroupResponse.status);
+
+        return propertyGroupsPayload;
     }
 
     async hydrateEnvWithProducts(products, category) {
@@ -228,6 +233,14 @@ export class DataHydrator {
                 product.productReviews = p.productReviews.map((review) => {
                     review.salesChannelId = salesChannel.id;
                     return review;
+                });
+            }
+
+            if (p.options) {
+                product.properties = p.options.map((option) => {
+                    return {
+                        id: option.id,
+                    }
                 });
             }
 

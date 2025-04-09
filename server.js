@@ -42,10 +42,19 @@ app.post('/generate', async (request, response) => {
         return;
     }
 
+    let propertyGroups = null;
     let products = [];
 
     try {
-        products = await dataGenerator.generateProducts(productCategory, true, true, productCount);
+        const propertyGroupsData = await dataGenerator.generatePropertyGroups(category);
+        propertyGroups = await dataHydrator.hydrateEnvWithPropertyGroups(propertyGroupsData);
+    } catch (e) {
+        response.status(500).send(e);
+        return;
+    }
+
+    try {
+        products = await dataGenerator.generateProducts(productCategory, productCount, propertyGroups, true, true);
     } catch (e) {
         response.status(500).send(e);
         return;
@@ -57,9 +66,7 @@ app.post('/generate', async (request, response) => {
     }
 
     try {
-        const generateResponse = await dataHydrator.hydrateEnvWithProducts(products, productCategory);
-
-        console.log('Generate Response');
+        await dataHydrator.hydrateEnvWithProducts(products, productCategory);
     } catch (e) {
         response.status(500).send(e);
         return;

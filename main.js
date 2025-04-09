@@ -15,8 +15,8 @@ const dataGenerator = new DataGenerator(openAiApiKey)
 
 await dataHydrator.authenticateWithClientCredentials(swEnvUrl, clientId, clientSecret)
 
-// const propertyGroups = await dataGenerator.generatePropertyGroups(category);
-// await dataHydrator.hydrateEnvWithPropertyGroups(propertyGroups);
+const propertyGroupsData = await dataGenerator.generatePropertyGroups(category);
+const propertyGroups = await dataHydrator.hydrateEnvWithPropertyGroups(propertyGroupsData);
 
-const products = await dataGenerator.generateProducts(category, true, true, productCount);
+const products = await dataGenerator.generateProducts(category, productCount, propertyGroups);
 await dataHydrator.hydrateEnvWithProducts(products, category);

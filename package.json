@@ -1,17 +1,32 @@
 {
-  "name": "shopware-data-hydrator",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "main": "main.js",
-  "scripts": {
-    "generate": "node --env-file=.env main.js",
-    "server": "node --env-file=.env server.js"
-  },
-  "dependencies": {
-    "openai": "4.92.1",
-    "axios": "1.8.4",
-    "express": "4.21.2",
-    "zod": "3.24.2"
-  }
+    "name": "shopware-data-generator",
+    "description": "A tool to create AI-generated demo data for Shopware",
+    "author": "Philipp Schuch",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "dist/main.js",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "npm run format && tsc --build",
+        "format": "prettier --write .",
+        "check-format": "prettier --check .",
+        "generate": "node --env-file=.env dist/main.js",
+        "server": "node --env-file=.env dist/server.js"
+    },
+    "dependencies": {
+        "openai": "4.92.1",
+        "axios": "1.8.4",
+        "express": "4.21.2",
+        "zod": "3.24.2"
+    },
+    "devDependencies": {
+        "typescript": "^5.8.2",
+        "prettier": "^3.5.3",
+        "@types/express": "^5.0.0",
+        "@types/node": "^22.13.10",
+        "@arethetypeswrong/cli": "^0.17.4"
+    }
 }

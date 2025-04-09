@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const ProductDefinition = z.object({
     name: z.string(),
@@ -15,7 +15,7 @@ export const PropertyOptionDefinition = z.object({
 export const PropertyGroupDefinition = z.object({
     name: z.string(),
     description: z.string(),
-    displayType: z.enum(['text', 'color']),
+    displayType: z.enum(["text", "color"]),
     options: z.array(PropertyOptionDefinition),
 });
 

@@ -1,14 +1,27 @@
 # AI Data Hydrator
+
 The data hydrator is a tool to create synthetic demo data and hydrate a Shopware environment with it. It uses OpenAI to create product information and product images. You can provide a category name for which type of industry you want to create products. The hydrator will create a new category within your Shopware instance with the generated products. The products are also assigned to the main category of your instance and assigned to the standard sales channel. If you generate more than once with the same category, the products are automatically added to the existing category.
 
 ## Setup
+
 Create an `.env` file to configure the necessary API keys.
 
 ```
 OPENAI_API_KEY = <your-api-key-from-open-ai>
 ```
 
+Install the dependencies and run the build process.
+
+```
+npm install
+``` 
+
+```
+npm run build
+```
+
 ## Usage via CLI
+
 You can run the generator via the CLI. Make sure to set up your environment information first via `.env` variables.
 
 ```
@@ -16,6 +29,7 @@ SW_ENV_URL = <the-url-of-your-shopware-env>
 SW_CLIENT_ID = <the-client-id-from-your-env>
 SW_CLIENT_SECRET = <the-secret-key-from-your-env>
 ```
+
 If you don't provide these information, the generator will automatically use a fallback to a standard dev environment setting under `http://localhost:8000` and the standard development credentials.
 
 You can then generate products simply calling the following command, including the type of products you want to generate with the `category` parameter.
@@ -25,6 +39,7 @@ npm run generate --category="furniture"
 ```
 
 ## Usage via Server
+
 The data generator can be used as a service to hydrate different environments via server request. To run the server you can call the following command:
 
 ```
@@ -37,11 +52,11 @@ For generating data via the server you can fire a `post` request to its only rou
 
 ```JSON
 {
-    "envPath": "http://localhost:8000",   // The base path to the Shopware instance.
-    "shopwareUser": "admin",              // The admin user name to authenticate with the instance.
-    "shopwarePassword": "shopware",       // The admin password to authenticate with the instance.
-    "category": "photography",            // The category of products that should be generated.
-    "productCount": 10                    // The number of products that should be generade. (Optional, Default: 10)
+    "envPath": "http://localhost:8000",
+    "shopwareUser": "admin",
+    "shopwarePassword": "shopware",
+    "category": "photography",
+    "productCount": 10
 }
 ```
 

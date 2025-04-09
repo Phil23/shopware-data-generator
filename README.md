@@ -1,6 +1,6 @@
-# AI Data Hydrator
+# AI Data Generator
 
-The data hydrator is a tool to create synthetic demo data and hydrate a Shopware environment with it. It uses OpenAI to create product information and product images. You can provide a category name for which type of industry you want to create products. The hydrator will create a new category within your Shopware instance with the generated products. The products are also assigned to the main category of your instance and assigned to the standard sales channel. If you generate more than once with the same category, the products are automatically added to the existing category.
+The data generator is a tool to create synthetic demo data with the help of AI and hydrate a Shopware environment with it. It uses OpenAI to create product information, product images, reviews, and property groups. You can provide a category name for which type of industry you want to create products. The generator will create a new category within your Shopware instance with the generated products. The products are also assigned to the main category of your instance and assigned to the standard sales channel. If you generate more than once with the same category, the products are automatically added to the existing category.
 
 ## Setup
 

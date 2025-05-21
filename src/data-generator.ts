@@ -75,7 +75,6 @@ export class DataGenerator {
                 this.generateProduct(
                     category,
                     propertyGroups,
-                    generateImages,
                     generateReviews,
                     descriptionWordCount,
                 ),
@@ -94,7 +93,6 @@ export class DataGenerator {
     async generateProduct(
         category: string,
         propertyGroups: Record<string, any> | null = null,
-        generateImages = true,
         generateReviews = true,
         descriptionWordCount = 200,
     ) {

@@ -14,7 +14,7 @@ Install the dependencies and run the build process.
 
 ```
 npm install
-``` 
+```
 
 ```
 npm run build

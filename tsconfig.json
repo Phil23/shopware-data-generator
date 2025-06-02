@@ -22,5 +22,6 @@
 
         "declaration": true,
         "declarationMap": true
-    }
+    },
+    "exclude": ["dist", "packages/*", "client", "client-api"]
 }

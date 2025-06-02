@@ -1,6 +1,8 @@
 node_modules/
 generatedImages/
 dist/
+client-api/
+client/
 /.idea/
 /.fleet/
 *.http
@@ -11,6 +13,9 @@ dist/
 tsconfig.tsbuildinfo
 ._*
 !**/.gitkeep
+shop.db
+shop.db-shm
+shop.db-wal
 npm-debug.log
 .DS_Store
 .DS_Store?

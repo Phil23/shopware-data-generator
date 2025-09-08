@@ -23,6 +23,7 @@ app.post("/generate", async (request, response) => {
     const envPath = request.body["envPath"];
     const productCategory = request.body["category"] || "soft drinks";
     const productCount = request.body["productCount"] || 10;
+    const salesChannelName = request.body["salesChannel"] || "Storefront";
 
     if (!envPath) {
         response.status(500).send('Missing parameter "envPath".');
@@ -55,6 +56,7 @@ app.post("/generate", async (request, response) => {
         const propertyGroupsData = await dataGenerator.generatePropertyGroups(productCategory);
         propertyGroups = await dataHydrator.hydrateEnvWithPropertyGroups(propertyGroupsData);
     } catch (e) {
+        console.error(e);
         response.status(500).send(e);
         return;
     }
@@ -68,6 +70,7 @@ app.post("/generate", async (request, response) => {
             true,
         );
     } catch (e) {
+        console.error(e);
         response.status(500).send(e);
         return;
     }
@@ -78,8 +81,9 @@ app.post("/generate", async (request, response) => {
     }
 
     try {
-        await dataHydrator.hydrateEnvWithProducts(products, productCategory);
+        await dataHydrator.hydrateEnvWithProducts(products, productCategory, salesChannelName);
     } catch (e) {
+        console.error(e);
         response.status(500).send(e);
         return;
     }

@@ -122,14 +122,14 @@ export class DataHydrator {
         return taxResponse.data.data[0].id;
     }
 
-    async getStandardSalesChannel() {
+    async getStandardSalesChannel(salesChannelName: string = "Storefront") {
         const salesChannelResponse = await this.apiClient.post("search/sales-channel", {
             limit: 1,
             filter: [
                 {
                     type: "equals",
                     field: "name",
-                    value: "Storefront",
+                    value: salesChannelName,
                 },
             ],
         });
@@ -207,7 +207,11 @@ export class DataHydrator {
         return propertyGroupsPayload;
     }
 
-    async hydrateEnvWithProducts(products: Record<string, any>, category: string) {
+    async hydrateEnvWithProducts(
+        products: Record<string, any>,
+        category: string,
+        salesChannelName: string = "Storefront",
+    ) {
         if (!this.apiClientAccessToken) {
             console.error("Client is not authenticated.");
             return false;
@@ -215,7 +219,7 @@ export class DataHydrator {
 
         const currencyId = await this.getCurrencyId();
         const taxId = await this.getStandardTaxId();
-        const salesChannel = await this.getStandardSalesChannel();
+        const salesChannel = await this.getStandardSalesChannel(salesChannelName);
 
         const productCategory = await this.createProductCategory(category, salesChannel);
 

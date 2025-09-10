@@ -217,9 +217,14 @@ export class DataHydrator {
             return false;
         }
 
-        const currencyId = await this.getCurrencyId();
         const taxId = await this.getStandardTaxId();
         const salesChannel = await this.getStandardSalesChannel(salesChannelName);
+
+        let currencyId = salesChannel.currencyId;
+
+        if (!currencyId) {
+            currencyId = await this.getCurrencyId();
+        }
 
         const productCategory = await this.createProductCategory(category, salesChannel);
 

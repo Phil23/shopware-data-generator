@@ -32,12 +32,12 @@ export class DataGenerator {
     async generatePropertyGroups(category: string, groupCount = 2) {
         console.log("Generating property group data ...");
 
-        const prompt = `Create fake sample data for ${groupCount} product property groups in JSON format 
+        const prompt = `Create realistic sample data for ${groupCount} product property groups in JSON format 
                               that could describe the properties of products of the industry ${category}.`;
 
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: "system", content: prompt }],
-            model: "gpt-4o-2024-08-06",
+            model: "gpt-4.1-2025-04-14",
             response_format: zodResponseFormat(
                 z.object({
                     propertyGroups: z.array(PropertyGroupDefinition),
@@ -98,16 +98,16 @@ export class DataGenerator {
     ) {
         let schema = ProductDefinition;
 
-        let prompt = `Create fake sample data for a product of an online store in JSON format. 
-                      The product should resemble a fake item of the industry ${category}, but not from real-world brands.
-                      The product description should contain at least ${descriptionWordCount} words.`;
+        let prompt = `Create realistic sample data for a product of an online store in JSON format. 
+                      The product should resemble a realistic item of the industry ${category}, but not from real-world brands.
+                      The product description should contain at least ${descriptionWordCount} words. You can use simple html to format the description.`;
 
         if (generateReviews) {
             schema = schema.extend({
                 productReviews: z.array(ProductReviewDefinition),
             });
 
-            prompt = `${prompt} The product should have at least five reviews with points between 1 and 5.`;
+            prompt = `${prompt} The product should have at least five realistic reviews with points between 1 and 5.`;
         }
 
         if (propertyGroups) {
@@ -127,12 +127,12 @@ export class DataGenerator {
                 ),
             });
 
-            prompt = `${prompt} The product should have at least two randomly chosen options from the possible options.`;
+            prompt = `${prompt} The product should have at least two fitting options from the possible options.`;
         }
 
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: "system", content: prompt }],
-            model: "gpt-4o-2024-08-06",
+            model: "gpt-4.1-2025-04-14",
             response_format: zodResponseFormat(schema, "product"),
         });
 
@@ -175,17 +175,18 @@ export class DataGenerator {
             return product;
         }
 
-        const prompt = `Create a photo-realistic fake product image separated on a white background without text or other elements 
-                        that matches the name ${product.name} from the category ${category}.`;
+        const prompt = `CRITICAL INSTRUCTION: Create a professional, commercial studio photograph of a photo-realistic product image. The image must be on a pristine white background with a clean, hard-edged shadow underneath the product. 
+			No text, logos, or other distracting elements are allowed. The product should be captured with a high-end DSLR camera using a macro lens, set with a shallow depth of field (f/1.8). 
+			The lighting is soft and even, highlighting the product's details and texture without harsh reflections. 
+			The product picture should match the name ${product.name} with the product description: ${product.description} from the category ${category}.`;
 
         let imageBase64: string = "";
 
         try {
             const imageResponse = await this.openAI.images.generate({
-                model: "dall-e-3",
+                model: "gpt-image-1",
                 prompt: prompt,
                 size: "1024x1024",
-                response_format: "b64_json",
                 n: 1,
             });
 

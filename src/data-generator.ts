@@ -396,6 +396,7 @@ export class DataGenerator {
         let imageBase64: string = "";
 
         try {
+            console.log("[Image Generation] Prompt:\n", prompt);
             const imageResponse = await this.openAI.images.generate({
                 model: "gpt-image-1",
                 prompt: prompt,

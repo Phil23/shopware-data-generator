@@ -6,8 +6,17 @@ import { z } from "zod";
 import { ProductDefinition, ProductReviewDefinition, PropertyGroupDefinition } from "./entities.js";
 import axios from "axios";
 import { load as loadHtml } from "cheerio";
-import puppeteer from "puppeteer-extra";
+import puppeteerCore from "puppeteer";
+import { addExtra } from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
+
+// Augment puppeteer with stealth plugin (typed)
+const puppeteer = addExtra(puppeteerCore);
+puppeteer.use(StealthPlugin());
+
+// Declare DOM globals used inside page.evaluate/waitForFunction for TS type safety
+declare const window: any;
+declare const document: any;
 
 export class DataGenerator {
     public readonly openAI: OpenAI;
@@ -231,9 +240,6 @@ export class DataGenerator {
     }
 
     private async fetchRenderedHtml(url: string): Promise<string> {
-        // Enable stealth evasions
-        puppeteer.use(StealthPlugin());
-
         const browser = await puppeteer.launch({
             headless: true,
             args: [
@@ -256,16 +262,16 @@ export class DataGenerator {
             // If a bot challenge page appears, wait briefly for it to resolve
             try {
                 await page.waitForFunction(
-                    () => !/Just a moment|Attention Required/i.test(document.title),
+                    (() => !/Just a moment|Attention Required/i.test(document.title)) as unknown as any,
                     { timeout: 15000 },
                 );
             } catch {
                 // ignore; proceed with current DOM
             }
             // Nudge the page a little to trigger lazy content
-            await page.evaluate(() => {
+            await page.evaluate((() => {
                 window.scrollTo(0, document.body.scrollHeight / 2);
-            });
+            }) as unknown as any);
             await new Promise((r) => setTimeout(r, 1000));
             const content = await page.content();
             return content;

@@ -239,44 +239,91 @@ export class DataGenerator {
     }
 
     private async fetchRenderedHtml(url: string): Promise<string> {
-        const browser = await puppeteer.launch({
-            headless: true,
-            args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-blink-features=AutomationControlled",
-            ],
-        });
-        try {
-            const page = await browser.newPage();
-            // Use a realistic desktop Chrome UA
-            await page.setUserAgent(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-            );
-            await page.setExtraHTTPHeaders({
-                "accept-language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
-            });
-            await page.setViewport({ width: 1366, height: 768 });
-            await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
-            // If a bot challenge page appears, wait briefly for it to resolve
-            try {
-                await page.waitForFunction(
-                    (() => !/Just a moment|Attention Required/i.test(document.title)) as unknown as any,
-                    { timeout: 15000 },
-                );
-            } catch {
-                // ignore; proceed with current DOM
-            }
-            // Nudge the page a little to trigger lazy content
-            await page.evaluate((() => {
-                window.scrollTo(0, document.body.scrollHeight / 2);
-            }) as unknown as any);
-            await new Promise((r) => setTimeout(r, 1000));
-            const content = await page.content();
-            return content;
-        } finally {
-            await browser.close();
+        const proxyUrl = process.env["CRAWL_PROXY"]; // e.g. http://user:pass@host:port
+        const timeoutMs = parseInt(process.env["CRAWL_TIMEOUT_MS"] || "45000", 10);
+        const maxRetries = Math.max(1, parseInt(process.env["CRAWL_MAX_RETRIES"] || "3", 10));
+
+        const launchArgs = [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-blink-features=AutomationControlled",
+        ];
+        if (proxyUrl) {
+            launchArgs.push(`--proxy-server=${proxyUrl}`);
         }
+
+        const userAgents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+        ];
+
+        let lastError: any = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const browser = await puppeteer.launch({ headless: true, args: launchArgs });
+            try {
+                const page = await browser.newPage();
+                const ua = userAgents[attempt % userAgents.length];
+                await page.setUserAgent(ua);
+                await page.setExtraHTTPHeaders({
+                    "accept-language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+                });
+                await page.setViewport({ width: 1366, height: 768 });
+
+                // Proxy auth if embedded in URL
+                if (proxyUrl && proxyUrl.includes("@")) {
+                    try {
+                        const authPart = proxyUrl.split("@")[0];
+                        const creds = authPart.split("//")[1];
+                        const [username, password] = creds.split(":");
+                        if (username && password) {
+                            await page.authenticate({ username, password });
+                        }
+                    } catch {}
+                }
+
+                await page.goto(url, { waitUntil: "networkidle2", timeout: timeoutMs });
+
+                // Wait for full ready state
+                try {
+                    await page.waitForFunction(
+                        (() => document.readyState === "complete") as unknown as any,
+                        { timeout: Math.min(10000, timeoutMs) },
+                    );
+                } catch {}
+
+                // Try to wait out common bot-challenge interstitials
+                try {
+                    await page.waitForFunction(
+                        (() => !/Just a moment|Attention Required/i.test(document.title)) as unknown as any,
+                        { timeout: Math.min(15000, timeoutMs) },
+                    );
+                } catch {}
+
+                // Nudge page for lazy content
+                await page.evaluate((() => {
+                    window.scrollTo(0, document.body.scrollHeight / 2);
+                }) as unknown as any);
+                await new Promise((r) => setTimeout(r, 1000));
+
+                // If we still see a challenge marker, throw to retry
+                const title = await page.title();
+                if (/Just a moment|Attention Required|Access denied|Forbidden/i.test(title)) {
+                    throw new Error(`Challenge not passed (title: ${title})`);
+                }
+
+                const content = await page.content();
+                return content;
+            } catch (err) {
+                lastError = err;
+                console.warn(`Rendered fetch attempt ${attempt + 1}/${maxRetries} failed:`, err);
+            } finally {
+                await browser.close();
+            }
+        }
+
+        throw lastError || new Error("Rendered fetch failed");
     }
 
     private extractReadableTextFromHtml(html: string): string {

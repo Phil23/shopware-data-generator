@@ -90,3 +90,16 @@ Notes:
 
 - JS-rendered pages are supported (headless rendering). Very large pages are truncated.
 - If rendering or fetching fails, the original `additionalInformation` is used without crawled content.
+
+Crawler configuration via env (optional):
+
+```
+# HTTP proxy to use for crawling (supports basic auth in URL)
+CRAWL_PROXY=http://user:pass@host:port
+
+# Max time per page load (ms)
+CRAWL_TIMEOUT_MS=45000
+
+# Retry attempts for rendered fetch
+CRAWL_MAX_RETRIES=3
+```

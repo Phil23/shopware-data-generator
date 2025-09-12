@@ -68,3 +68,25 @@ Optional fields:
 
 - `salesChannel`: Name of the sales channel to assign visibility (default: `Storefront`).
 - `additionalInformation`: Additional free-text context that will be incorporated into both the product description prompt and the image generation prompt.
+
+### Using a URL in `additionalInformation`
+
+You can include a URL within `additionalInformation`. The server will crawl the page with a headless browser (JS-rendering via Puppeteer), extract readable content (headings, paragraphs, list items), and inject a concise excerpt into the prompts. This helps generate products that align with the referenced content.
+
+Example:
+
+```json
+{
+  "envPath": "http://localhost:8000",
+  "shopwareUser": "admin",
+  "shopwarePassword": "shopware",
+  "category": "photography",
+  "productCount": 5,
+  "additionalInformation": "See also https://example.com/brand-guidelines for tone, materials and target audience"
+}
+```
+
+Notes:
+
+- JS-rendered pages are supported (headless rendering). Very large pages are truncated.
+- If rendering or fetching fails, the original `additionalInformation` is used without crawled content.

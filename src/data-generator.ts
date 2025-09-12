@@ -4,6 +4,9 @@ import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import { ProductDefinition, ProductReviewDefinition, PropertyGroupDefinition } from "./entities.js";
+import axios from "axios";
+import { load as loadHtml } from "cheerio";
+import puppeteer from "puppeteer";
 
 export class DataGenerator {
     public readonly openAI: OpenAI;
@@ -69,10 +72,17 @@ export class DataGenerator {
     ) {
         console.log(`Generating product data ...`);
 
+        // Enrich additional information by crawling URL content if a URL is present
+        const enrichedAdditionalInformation = await this.enrichAdditionalInformation(additionalInformation);
+
         // Try fast path: generate distinct briefs in a single call, then fan-out product generation in parallel
         let products: Record<string, any>[] = [];
         try {
-            const briefs = await this.generateProductBriefs(category, productCount, additionalInformation);
+            const briefs = await this.generateProductBriefs(
+                category,
+                productCount,
+                enrichedAdditionalInformation,
+            );
 
             if (Array.isArray(briefs) && briefs.length > 0) {
                 products = await Promise.all(
@@ -82,7 +92,7 @@ export class DataGenerator {
                             propertyGroups,
                             generateReviews,
                             descriptionWordCount,
-                            additionalInformation,
+                            enrichedAdditionalInformation,
                             [],
                             brief,
                         );
@@ -90,7 +100,7 @@ export class DataGenerator {
                 );
             }
         } catch (err) {
-            // fall back to sequential below
+            console.error(err);
         }
 
         // Fallback: sequential with prior name awareness (slower but reliable)
@@ -103,7 +113,7 @@ export class DataGenerator {
                     propertyGroups,
                     generateReviews,
                     descriptionWordCount,
-                    additionalInformation,
+                    enrichedAdditionalInformation,
                     previousProductNames,
                 );
 
@@ -116,7 +126,11 @@ export class DataGenerator {
         if (!generateImages) {
             return products;
         } else {
-            return await this.generateProductImages(products, category, additionalInformation);
+            return await this.generateProductImages(
+                products,
+                category,
+                enrichedAdditionalInformation,
+            );
         }
     }
 
@@ -195,6 +209,84 @@ export class DataGenerator {
             }
         } catch (e) {
             console.error(e);
+        }
+    }
+
+    private extractFirstUrl(text: string): string | null {
+        if (!text) return null;
+        const match = text.match(/https?:\/\/[^\s]+/i);
+        return match ? match[0] : null;
+    }
+
+    private async fetchHtml(url: string): Promise<string> {
+        const response = await axios.get<string>(url, {
+            timeout: 10000,
+            headers: {
+                "User-Agent": "Shopware-Data-Generator/1.0 (+https://github.com/Phil23/shopware-data-generator)",
+                Accept: "text/html,application/xhtml+xml,application/xml",
+            },
+        });
+        return response.data || "";
+    }
+
+    private async fetchRenderedHtml(url: string): Promise<string> {
+        const browser = await puppeteer.launch({
+            headless: true,
+            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        });
+        try {
+            const page = await browser.newPage();
+            await page.setUserAgent(
+                "Shopware-Data-Generator/1.0 (+https://github.com/Phil23/shopware-data-generator)",
+            );
+            await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+            await page.waitForTimeout(1000);
+            const content = await page.content();
+            return content;
+        } finally {
+            await browser.close();
+        }
+    }
+
+    private extractReadableTextFromHtml(html: string): string {
+        const $ = loadHtml(html);
+        $("script, style, noscript, svg, nav, footer, header, aside").remove();
+        const blocks: string[] = [];
+        $("h1, h2, h3, h4, h5, h6, p, li").each((_, el) => {
+            const text = $(el).text().replace(/\s+/g, " ").trim();
+            if (text && text.length > 0) {
+                blocks.push(text);
+            }
+        });
+        const combined = blocks.join("\n");
+        return combined.replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    private clipText(input: string, maxChars = 3000): string {
+        if (!input || input.length <= maxChars) return input;
+        return input.slice(0, maxChars) + "\n...[truncated]";
+    }
+
+    private async enrichAdditionalInformation(additionalInformation: string): Promise<string> {
+        const url = this.extractFirstUrl(additionalInformation || "");
+        if (!url) {
+            return additionalInformation;
+        }
+
+        try {
+            let html = "";
+            try {
+                html = await this.fetchRenderedHtml(url);
+            } catch (e) {
+                html = await this.fetchHtml(url);
+            }
+            const text = this.extractReadableTextFromHtml(html);
+            const clipped = this.clipText(text, 3000);
+            const injected = `${additionalInformation}\n\nCrawled source URL: ${url}\nRelevant extracted content (summarize and prioritize as needed):\n${clipped}`;
+            return injected;
+        } catch (err) {
+            console.warn("Failed to crawl additionalInformation URL:", err);
+            return additionalInformation;
         }
     }
 

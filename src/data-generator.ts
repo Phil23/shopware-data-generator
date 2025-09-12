@@ -240,7 +240,7 @@ export class DataGenerator {
                 "Shopware-Data-Generator/1.0 (+https://github.com/Phil23/shopware-data-generator)",
             );
             await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
-            await page.waitForTimeout(1000);
+            await new Promise((r) => setTimeout(r, 1000));
             const content = await page.content();
             return content;
         } finally {

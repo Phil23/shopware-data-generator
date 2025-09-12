@@ -272,11 +272,11 @@ export class DataGenerator {
                 await page.setViewport({ width: 1366, height: 768 });
 
                 // Proxy auth if embedded in URL
-                if (proxyUrl && proxyUrl.includes("@")) {
+                if (proxyUrl) {
                     try {
-                        const authPart = proxyUrl.split("@")[0];
-                        const creds = authPart.split("//")[1];
-                        const [username, password] = creds.split(":");
+                        const parsed = new URL(proxyUrl);
+                        const username = parsed.username || "";
+                        const password = parsed.password || "";
                         if (username && password) {
                             await page.authenticate({ username, password });
                         }

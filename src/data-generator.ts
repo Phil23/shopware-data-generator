@@ -6,12 +6,11 @@ import { z } from "zod";
 import { ProductDefinition, ProductReviewDefinition, PropertyGroupDefinition } from "./entities.js";
 import axios from "axios";
 import { load as loadHtml } from "cheerio";
-import puppeteerCore from "puppeteer";
-import { addExtra } from "puppeteer-extra";
+import puppeteerExtra from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
-// Augment puppeteer with stealth plugin (typed)
-const puppeteer = addExtra(puppeteerCore);
+// Use puppeteer-extra with stealth, casting to any to avoid TS type friction with v23
+const puppeteer = puppeteerExtra as unknown as any;
 puppeteer.use(StealthPlugin());
 
 // Declare DOM globals used inside page.evaluate/waitForFunction for TS type safety

@@ -65,6 +65,7 @@ export class DataGenerator {
         generateImages = true,
         generateReviews = true,
         descriptionWordCount = 200,
+        additionalInformation: string = "",
     ) {
         console.log(`Generating product data ...`);
 
@@ -77,6 +78,7 @@ export class DataGenerator {
                     propertyGroups,
                     generateReviews,
                     descriptionWordCount,
+                    additionalInformation,
                 ),
             );
         }
@@ -86,7 +88,7 @@ export class DataGenerator {
         if (!generateImages) {
             return products;
         } else {
-            return await this.generateProductImages(products, category);
+            return await this.generateProductImages(products, category, additionalInformation);
         }
     }
 
@@ -95,6 +97,7 @@ export class DataGenerator {
         propertyGroups: Record<string, any> | null = null,
         generateReviews = true,
         descriptionWordCount = 200,
+        additionalInformation: string = "",
     ) {
         let schema = ProductDefinition;
 
@@ -130,6 +133,10 @@ export class DataGenerator {
             prompt = `${prompt} The product should have at least two fitting options from the possible options.`;
         }
 
+        if (additionalInformation && additionalInformation.trim().length > 0) {
+            prompt = `${prompt} Consider the following additional context for the product and its description: \"${additionalInformation}\".`;
+        }
+
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: "system", content: prompt }],
             model: "gpt-4.1-2025-04-14",
@@ -145,17 +152,17 @@ export class DataGenerator {
         }
     }
 
-    async generateProductImages(products: Record<string, any>[], category: string) {
+    async generateProductImages(products: Record<string, any>[], category: string, additionalInformation: string = "") {
         console.log("Generating product images ...");
 
         return await Promise.all(
             products.map(async (product) => {
-                return await this.generateProductImage(product, category);
+                return await this.generateProductImage(product, category, additionalInformation);
             }),
         );
     }
 
-    async generateProductImage(product: Record<string, any>, category: string) {
+    async generateProductImage(product: Record<string, any>, category: string, additionalInformation: string = "") {
         const categoryImageDir = this.createCategoryImageDir(category);
 
         const imageName = product.name.replace(/[^a-zA-Z]/g, "");
@@ -175,10 +182,14 @@ export class DataGenerator {
             return product;
         }
 
-        const prompt = `CRITICAL INSTRUCTION: Create a professional, commercial studio photograph of a photo-realistic product image. The image must be on a pristine white background with a clean, hard-edged shadow underneath the product. 
+        let prompt = `CRITICAL INSTRUCTION: Create a professional, commercial studio photograph of a photo-realistic product image. The image must be on a pristine white background with a clean, hard-edged shadow underneath the product. 
 			No text, logos, or other distracting elements are allowed. The product should be captured with a high-end DSLR camera using a macro lens, set with a shallow depth of field (f/1.8). 
 			The lighting is soft and even, highlighting the product's details and texture without harsh reflections. 
 			The product picture should match the name ${product.name} with the product description: ${product.description} from the category ${category}.`;
+
+        if (additionalInformation && additionalInformation.trim().length > 0) {
+            prompt = `${prompt} Additional context to consider for the image styling or details: \"${additionalInformation}\".`;
+        }
 
         let imageBase64: string = "";
 

@@ -24,6 +24,7 @@ app.post("/generate", async (request, response) => {
     const productCategory = request.body["category"] || "soft drinks";
     const productCount = request.body["productCount"] || 10;
     const salesChannelName = request.body["salesChannel"] || "Storefront";
+    const additionalInformation = request.body["additionalInformation"] || "";
 
     if (!envPath) {
         response.status(500).send('Missing parameter "envPath".');
@@ -68,6 +69,8 @@ app.post("/generate", async (request, response) => {
             propertyGroups,
             true,
             true,
+            200,
+            additionalInformation,
         );
     } catch (e) {
         console.error(e);

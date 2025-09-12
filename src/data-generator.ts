@@ -69,21 +69,23 @@ export class DataGenerator {
     ) {
         console.log(`Generating product data ...`);
 
-        const productRequests = [];
+        const products: Record<string, any>[] = [];
 
         for (let i = 0; i < productCount; i++) {
-            productRequests.push(
-                this.generateProduct(
-                    category,
-                    propertyGroups,
-                    generateReviews,
-                    descriptionWordCount,
-                    additionalInformation,
-                ),
+            const previousProductNames = products.map((p) => p.name).filter(Boolean);
+            const product = await this.generateProduct(
+                category,
+                propertyGroups,
+                generateReviews,
+                descriptionWordCount,
+                additionalInformation,
+                previousProductNames,
             );
-        }
 
-        const products = await Promise.all(productRequests);
+            if (product) {
+                products.push(product);
+            }
+        }
 
         if (!generateImages) {
             return products;
@@ -98,6 +100,7 @@ export class DataGenerator {
         generateReviews = true,
         descriptionWordCount = 200,
         additionalInformation: string = "",
+        previousProductNames: string[] = [],
     ) {
         let schema = ProductDefinition;
 
@@ -135,6 +138,11 @@ export class DataGenerator {
 
         if (additionalInformation && additionalInformation.trim().length > 0) {
             prompt = `${prompt} Consider the following additional context for the product and its description: \"${additionalInformation}\".`;
+        }
+
+        if (previousProductNames && previousProductNames.length > 0) {
+            const previousList = previousProductNames.map((n) => `\"${n}\"`).join(", ");
+            prompt = `${prompt} IMPORTANT: Avoid creating a product that is too similar to any of these already generated items: ${previousList}. Pick a distinct concept, features, materials/ingredients, target audience, and price point. Ensure the name is clearly different.`;
         }
 
         const completion = await this.openAI.chat.completions.create({

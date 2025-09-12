@@ -69,21 +69,47 @@ export class DataGenerator {
     ) {
         console.log(`Generating product data ...`);
 
-        const products: Record<string, any>[] = [];
+        // Try fast path: generate distinct briefs in a single call, then fan-out product generation in parallel
+        let products: Record<string, any>[] = [];
+        try {
+            const briefs = await this.generateProductBriefs(category, productCount, additionalInformation);
 
-        for (let i = 0; i < productCount; i++) {
-            const previousProductNames = products.map((p) => p.name).filter(Boolean);
-            const product = await this.generateProduct(
-                category,
-                propertyGroups,
-                generateReviews,
-                descriptionWordCount,
-                additionalInformation,
-                previousProductNames,
-            );
+            if (Array.isArray(briefs) && briefs.length > 0) {
+                products = await Promise.all(
+                    briefs.map(async (brief) => {
+                        return await this.generateProduct(
+                            category,
+                            propertyGroups,
+                            generateReviews,
+                            descriptionWordCount,
+                            additionalInformation,
+                            [],
+                            brief,
+                        );
+                    }),
+                );
+            }
+        } catch (err) {
+            // fall back to sequential below
+        }
 
-            if (product) {
-                products.push(product);
+        // Fallback: sequential with prior name awareness (slower but reliable)
+        if (!products || products.length === 0) {
+            products = [];
+            for (let i = 0; i < productCount; i++) {
+                const previousProductNames = products.map((p) => p.name).filter(Boolean);
+                const product = await this.generateProduct(
+                    category,
+                    propertyGroups,
+                    generateReviews,
+                    descriptionWordCount,
+                    additionalInformation,
+                    previousProductNames,
+                );
+
+                if (product) {
+                    products.push(product);
+                }
             }
         }
 
@@ -101,6 +127,7 @@ export class DataGenerator {
         descriptionWordCount = 200,
         additionalInformation: string = "",
         previousProductNames: string[] = [],
+        brief: Record<string, any> | null = null,
     ) {
         let schema = ProductDefinition;
 
@@ -145,6 +172,17 @@ export class DataGenerator {
             prompt = `${prompt} IMPORTANT: Avoid creating a product that is too similar to any of these already generated items: ${previousList}. Pick a distinct concept, features, materials/ingredients, target audience, and price point. Ensure the name is clearly different.`;
         }
 
+        if (brief) {
+            const differentiators = Array.isArray(brief.differentiators)
+                ? brief.differentiators.map((d: string) => `• ${d}`).join("\n")
+                : "";
+            const priceTier = brief.priceTier ? String(brief.priceTier) : "";
+            const targetAudience = brief.targetAudience ? String(brief.targetAudience) : "";
+            const nameIdea = brief.nameIdea ? String(brief.nameIdea) : "";
+
+            prompt = `${prompt}\nBase the product strongly on this concept while keeping it realistic and not a real brand:\nName idea: ${nameIdea}\nTarget audience: ${targetAudience}\nPrice tier: ${priceTier}\nKey differentiators:\n${differentiators}`;
+        }
+
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: "system", content: prompt }],
             model: "gpt-4.1-2025-04-14",
@@ -158,6 +196,44 @@ export class DataGenerator {
         } catch (e) {
             console.error(e);
         }
+    }
+
+    async generateProductBriefs(
+        category: string,
+        productCount: number,
+        additionalInformation: string = "",
+    ): Promise<Record<string, any>[]> {
+        const Brief = z.object({
+            nameIdea: z.string(),
+            targetAudience: z.string(),
+            priceTier: z.enum(["budget", "mid", "premium"]).optional(),
+            differentiators: z.array(z.string()).min(3).max(6),
+        });
+
+        let prompt = `Create ${productCount} clearly distinct product concepts (not real brands) for the industry ${category}. Each concept must have: nameIdea, targetAudience, 3-6 differentiators, and an optional priceTier among budget/mid/premium.`;
+        if (additionalInformation && additionalInformation.trim().length > 0) {
+            prompt = `${prompt} Consider this additional context: \"${additionalInformation}\".`;
+        }
+
+        const completion = await this.openAI.chat.completions.create({
+            messages: [{ role: "system", content: prompt }],
+            model: "gpt-4.1-2025-04-14",
+            response_format: zodResponseFormat(
+                z.object({ briefs: z.array(Brief) }),
+                "briefs",
+            ),
+        });
+
+        try {
+            if (completion.choices[0]?.message.content) {
+                const parsed = JSON.parse(completion.choices[0].message.content);
+                return parsed["briefs"] || [];
+            }
+        } catch (e) {
+            console.error(e);
+        }
+
+        return [];
     }
 
     async generateProductImages(products: Record<string, any>[], category: string, additionalInformation: string = "") {

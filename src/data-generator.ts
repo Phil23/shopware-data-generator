@@ -6,7 +6,8 @@ import { z } from "zod";
 import { ProductDefinition, ProductReviewDefinition, PropertyGroupDefinition } from "./entities.js";
 import axios from "axios";
 import { load as loadHtml } from "cheerio";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
 export class DataGenerator {
     public readonly openAI: OpenAI;
@@ -230,16 +231,41 @@ export class DataGenerator {
     }
 
     private async fetchRenderedHtml(url: string): Promise<string> {
+        // Enable stealth evasions
+        puppeteer.use(StealthPlugin());
+
         const browser = await puppeteer.launch({
             headless: true,
-            args: ["--no-sandbox", "--disable-setuid-sandbox"],
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-blink-features=AutomationControlled",
+            ],
         });
         try {
             const page = await browser.newPage();
+            // Use a realistic desktop Chrome UA
             await page.setUserAgent(
-                "Shopware-Data-Generator/1.0 (+https://github.com/Phil23/shopware-data-generator)",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
             );
+            await page.setExtraHTTPHeaders({
+                "accept-language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+            });
+            await page.setViewport({ width: 1366, height: 768 });
             await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+            // If a bot challenge page appears, wait briefly for it to resolve
+            try {
+                await page.waitForFunction(
+                    () => !/Just a moment|Attention Required/i.test(document.title),
+                    { timeout: 15000 },
+                );
+            } catch {
+                // ignore; proceed with current DOM
+            }
+            // Nudge the page a little to trigger lazy content
+            await page.evaluate(() => {
+                window.scrollTo(0, document.body.scrollHeight / 2);
+            });
             await new Promise((r) => setTimeout(r, 1000));
             const content = await page.content();
             return content;

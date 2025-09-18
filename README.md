@@ -56,8 +56,15 @@ For generating data via the server you can fire a `post` request to its only rou
     "shopwareUser": "admin",
     "shopwarePassword": "shopware",
     "category": "photography",
-    "productCount": 10
+    "productCount": 10,
+    "salesChannel": "Storefront", // optional
+    "additionalInformation": "Optional additional context that is incorporated into the description and image" // optional
 }
 ```
 
 You can specify the environment that should be hydrated including the authentication credentials. In addition, you can specify the category and the number of products that should be generated. The number of products is optional. It is recommended to not generate more than 10 products per request as the creation of the images can take some time. You can split it into several requests to hydrate the same category multiple times.
+
+Optional fields:
+
+- `salesChannel`: Name of the sales channel to assign visibility (default: `Storefront`).
+- `additionalInformation`: Additional free-text context that will be incorporated into both the product description prompt and the image generation prompt.

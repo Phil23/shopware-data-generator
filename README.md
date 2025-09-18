@@ -58,7 +58,7 @@ For generating data via the server you can fire a `post` request to its only rou
     "category": "photography",
     "productCount": 10,
     "salesChannel": "Storefront", // optional
-    "additionalInformation": "Optionaler Zusatzkontext, der in Beschreibung und Bild einfließt" // optional
+    "additionalInformation": "Optional additional context that is incorporated into the description and image" // optional
 }
 ```
 

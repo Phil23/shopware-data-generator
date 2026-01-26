@@ -3,7 +3,7 @@ import { DataGenerator } from "./data-generator.js";
 
 const openAiApiKey = process.env["OPENAI_API_KEY"];
 
-const swEnvUrl = process.env["SW_ENV_URL"];
+const swEnvUrl = process.env["SW_ENV_URL"] || "http://localhost:8000";
 const clientId = process.env["SW_CLIENT_ID"];
 const clientSecret = process.env["SW_CLIENT_SECRET"];
 

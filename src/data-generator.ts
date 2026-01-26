@@ -152,7 +152,11 @@ export class DataGenerator {
         }
     }
 
-    async generateProductImages(products: Record<string, any>[], category: string, additionalInformation: string = "") {
+    async generateProductImages(
+        products: Record<string, any>[],
+        category: string,
+        additionalInformation: string = "",
+    ) {
         console.log("Generating product images ...");
 
         return await Promise.all(
@@ -162,7 +166,11 @@ export class DataGenerator {
         );
     }
 
-    async generateProductImage(product: Record<string, any>, category: string, additionalInformation: string = "") {
+    async generateProductImage(
+        product: Record<string, any>,
+        category: string,
+        additionalInformation: string = "",
+    ) {
         const categoryImageDir = this.createCategoryImageDir(category);
 
         const imageName = product.name.replace(/[^a-zA-Z]/g, "");

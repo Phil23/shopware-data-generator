@@ -5,11 +5,26 @@ import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import { ProductDefinition, ProductReviewDefinition, PropertyGroupDefinition } from "./entities.js";
 
+const ProductConceptDefinition = z.object({
+    name: z.string(),
+    concept: z.string(),
+});
+
+type ProductConcept = z.infer<typeof ProductConceptDefinition>;
+
+export const TEXT_GENERATION_MODELS = ["gpt-6-luna", "gpt-6.1-sol"] as const;
+export type TextGenerationModel = (typeof TEXT_GENERATION_MODELS)[number];
+
 export class DataGenerator {
     public readonly openAI: OpenAI;
     public readonly imageDir: string;
+    public readonly textModel: TextGenerationModel;
 
-    constructor(openAiApiKey: string, imageDir = "./generatedImages") {
+    constructor(
+        openAiApiKey: string,
+        imageDir = "./generatedImages",
+        textModel: TextGenerationModel = "gpt-6-luna",
+    ) {
         if (!openAiApiKey.length || openAiApiKey.length <= 0) {
             console.error("Missing API key for OpenAI.");
         }
@@ -19,6 +34,7 @@ export class DataGenerator {
         });
 
         this.imageDir = imageDir;
+        this.textModel = textModel;
 
         if (!fs.existsSync(this.imageDir)) {
             try {
@@ -37,7 +53,7 @@ export class DataGenerator {
 
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: "system", content: prompt }],
-            model: "gpt-6.1-sol",
+            model: this.textModel,
             response_format: zodResponseFormat(
                 z.object({
                     propertyGroups: z.array(PropertyGroupDefinition),
@@ -79,19 +95,26 @@ export class DataGenerator {
     ) {
         console.log(`Generating product data ...`);
 
-        const productRequests = [];
-
-        for (let i = 0; i < productCount; i++) {
-            productRequests.push(
-                this.generateProduct(
-                    category,
-                    propertyGroups,
-                    generateReviews,
-                    descriptionWordCount,
-                    additionalInformation,
-                ),
-            );
+        if (productCount <= 0) {
+            return [];
         }
+
+        const productConcepts = await this.generateProductConcepts(
+            category,
+            productCount,
+            additionalInformation,
+        );
+
+        const productRequests = productConcepts.map((productConcept) =>
+            this.generateProduct(
+                category,
+                propertyGroups,
+                generateReviews,
+                descriptionWordCount,
+                additionalInformation,
+                productConcept,
+            ),
+        );
 
         const products = await Promise.all(productRequests);
 
@@ -102,18 +125,68 @@ export class DataGenerator {
         }
     }
 
+    async generateProductConcepts(
+        category: string,
+        productCount: number,
+        additionalInformation = "",
+    ): Promise<ProductConcept[]> {
+        console.log(`Generating ${productCount} distinct product concepts ...`);
+
+        let prompt = `Create exactly ${productCount} distinct product concepts for an online store in the industry ${category}. Do not use real-world brands. Every concept must have a unique, appealing product name and a short description of what makes that product distinct from the others. Return varied product types, ingredients, features, or use cases instead of repeating the same basic product with different names.`;
+
+        if (additionalInformation && additionalInformation.trim().length > 0) {
+            prompt = `${prompt} Use this additional context where relevant: "${additionalInformation}".`;
+        }
+
+        const completion = await this.openAI.chat.completions.create({
+            messages: [{ role: "system", content: prompt }],
+            model: this.textModel,
+            response_format: zodResponseFormat(
+                z.object({
+                    products: z.array(ProductConceptDefinition).length(productCount),
+                }),
+                "product_concepts",
+            ),
+        });
+
+        try {
+            const content = completion.choices[0]?.message.content;
+            if (!content) {
+                return [];
+            }
+
+            const { products } = JSON.parse(content) as { products: ProductConcept[] };
+            const normalizedNames = products.map((product) =>
+                product.name.trim().toLocaleLowerCase(),
+            );
+            if (new Set(normalizedNames).size !== products.length) {
+                throw new Error("The generated product concepts contain duplicate names.");
+            }
+
+            return products;
+        } catch (e) {
+            console.error(e);
+            return [];
+        }
+    }
+
     async generateProduct(
         category: string,
         propertyGroups: Record<string, any> | null = null,
         generateReviews = true,
         descriptionWordCount = 200,
         additionalInformation: string = "",
+        productConcept?: ProductConcept,
     ) {
         let schema = ProductDefinition;
 
         let prompt = `Create realistic sample data for a product of an online store in JSON format. 
                       The product should resemble a realistic item of the industry ${category}, but not from real-world brands.
                       The product description should contain at least ${descriptionWordCount} words. You can use simple html to format the description.`;
+
+        if (productConcept) {
+            prompt = `${prompt} The product must use the exact name "${productConcept.name}" and follow this distinct concept: ${productConcept.concept}. Do not replace it with a different product or name.`;
+        }
 
         if (generateReviews) {
             schema = schema.extend({
@@ -149,13 +222,17 @@ export class DataGenerator {
 
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: "system", content: prompt }],
-            model: "gpt-6.1-sol",
+            model: this.textModel,
             response_format: zodResponseFormat(schema, "product"),
         });
 
         try {
             if (completion.choices[0]?.message.content) {
-                return JSON.parse(completion.choices[0].message.content);
+                const product = JSON.parse(completion.choices[0].message.content);
+                if (productConcept) {
+                    product.name = productConcept.name;
+                }
+                return product;
             }
         } catch (e) {
             console.error(e);

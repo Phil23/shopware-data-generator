@@ -32,11 +32,21 @@ SW_CLIENT_SECRET = <the-secret-key-from-your-env>
 
 If you don't provide these information, the generator will automatically use a fallback to a standard dev environment setting under `http://localhost:8000` and the standard development credentials.
 
-You can then generate products simply calling the following command, including the type of products you want to generate with the `category` parameter.
+Run the generator to answer an interactive wizard. Press Enter to accept each default:
 
 ```
-npm run generate --category="furniture"
+npm run generate
 ```
+
+You can also pass options after `--` to use them as the wizard defaults:
+
+```
+npm run generate -- --category "furniture" --products 10 --sales-channel "Storefront" --model "gpt-6-luna"
+```
+
+All options are optional. `--category` defaults to `soft drinks`, `--products` defaults to `10`, `--sales-channel` defaults to `Storefront`, and `--model` defaults to `gpt-6-luna`. Choose `gpt-6-luna` or `gpt-6.1-sol` for text generation.
+
+When run without an interactive terminal, the generator uses the supplied options and defaults without prompting.
 
 Each generation saves the Shopware sync payload as a JSON file in `generatedPayloads/` before applying it. Product images remain in `generatedImages/`; the saved payload references those files, so keep the payload and image directory together when moving replay data to another machine.
 

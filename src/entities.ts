@@ -9,7 +9,7 @@ export const ProductDefinition = z.object({
 
 export const PropertyOptionDefinition = z.object({
     name: z.string(),
-    colorHexCode: z.string().optional(),
+    colorHexCode: z.string().nullable(),
 });
 
 export const PropertyGroupDefinition = z.object({

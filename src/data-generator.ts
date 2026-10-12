@@ -37,7 +37,7 @@ export class DataGenerator {
 
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: "system", content: prompt }],
-            model: "gpt-4.1-2025-04-14",
+            model: "gpt-6.1-sol",
             response_format: zodResponseFormat(
                 z.object({
                     propertyGroups: z.array(PropertyGroupDefinition),
@@ -49,7 +49,17 @@ export class DataGenerator {
         try {
             if (completion.choices[0]?.message.content) {
                 const parsedResponse = JSON.parse(completion.choices[0].message.content);
-                return parsedResponse["propertyGroups"];
+                const propertyGroups = parsedResponse["propertyGroups"];
+
+                for (const group of propertyGroups) {
+                    for (const option of group.options) {
+                        if (option.colorHexCode === null) {
+                            delete option.colorHexCode;
+                        }
+                    }
+                }
+
+                return propertyGroups;
             } else {
                 return [];
             }
@@ -139,7 +149,7 @@ export class DataGenerator {
 
         const completion = await this.openAI.chat.completions.create({
             messages: [{ role: "system", content: prompt }],
-            model: "gpt-4.1-2025-04-14",
+            model: "gpt-6.1-sol",
             response_format: zodResponseFormat(schema, "product"),
         });
 
@@ -203,14 +213,14 @@ export class DataGenerator {
 
         try {
             const imageResponse = await this.openAI.images.generate({
-                model: "gpt-image-1",
+                model: "gpt-image-2.5-flare",
                 prompt: prompt,
                 size: "1024x1024",
                 n: 1,
             });
 
-            if (imageResponse.data[0] && imageResponse.data[0]["b64_json"]) {
-                imageBase64 = imageResponse.data[0]["b64_json"];
+            if (imageResponse.data?.[0]?.b64_json) {
+                imageBase64 = imageResponse.data[0].b64_json;
             }
         } catch (e) {
             console.warn(e);

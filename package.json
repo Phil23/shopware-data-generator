@@ -5,6 +5,9 @@
     "version": "1.0.0",
     "private": true,
     "type": "module",
+    "engines": {
+        "node": ">=22"
+    },
     "main": "dist/main.js",
     "files": [
         "dist"
@@ -18,8 +21,8 @@
     },
     "dependencies": {
         "express": "4.22.1",
-        "openai": "4.92.1",
-        "zod": "3.24.2"
+        "openai": "7.32.0",
+        "zod": "3.25.76"
     },
     "devDependencies": {
         "@arethetypeswrong/cli": "^0.17.4",

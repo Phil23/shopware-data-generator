@@ -26,6 +26,9 @@ export class HttpClient {
     ): Promise<HttpResponse<T>> {
         const headers = new Headers(this.headers);
         new Headers(options.headers).forEach((value, name) => headers.set(name, value));
+        if (!headers.has("Accept")) {
+            headers.set("Accept", "application/json, text/plain, */*");
+        }
 
         let requestBody: RequestInit["body"];
         if (body instanceof Uint8Array || typeof body === "string") {
@@ -41,13 +44,21 @@ export class HttpClient {
             body: requestBody,
         });
 
-        const contentType = response.headers.get("content-type") ?? "";
-        const data = contentType.includes("application/json")
-            ? await response.json()
-            : await response.text();
+        const responseText = await response.text();
+        let data: unknown = responseText;
+
+        if (responseText) {
+            try {
+                data = JSON.parse(responseText);
+            } catch {
+                // Leave non-JSON responses as text.
+            }
+        }
 
         if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const errorDetails =
+                typeof data === "string" ? data : JSON.stringify(data) || response.statusText;
+            throw new Error(`HTTP ${response.status}: ${errorDetails}`);
         }
 
         return { data: data as T, status: response.status };

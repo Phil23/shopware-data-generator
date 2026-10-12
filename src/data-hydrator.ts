@@ -7,6 +7,7 @@ export type SavedPayload = {
     version: 1;
     createdAt: string;
     category: string;
+    salesChannelName?: string;
     sync: Record<string, any>;
     mediaUploads: { id: string; file: string; fileName: string; extension: string }[];
 };
@@ -262,7 +263,14 @@ export class DataHydrator {
             },
         });
 
-        return { version: 1, createdAt: new Date().toISOString(), category, sync, mediaUploads };
+        return {
+            version: 1,
+            createdAt: new Date().toISOString(),
+            category,
+            salesChannelName,
+            sync,
+            mediaUploads,
+        };
     }
 
     async applySavedPayload(payload: SavedPayload) {
@@ -270,7 +278,62 @@ export class DataHydrator {
         if (payload.version !== 1)
             throw new Error(`Unsupported payload version: ${payload.version}`);
 
-        const response = await this.apiClient.post("_action/sync", payload.sync);
+        // Saved payloads may be applied to another Shopware installation, where
+        // built-in IDs (navigation category, sales channel, tax and currency) differ.
+        const sync = structuredClone(payload.sync);
+        const salesChannel = await this.getStandardSalesChannel(
+            payload.salesChannelName || "Storefront",
+        );
+        const taxId = await this.getStandardTaxId();
+        const currencyId = salesChannel.currencyId || (await this.getCurrencyId());
+        const oldNavigationCategoryId =
+            sync.hydrateCategory?.payload?.[0]?.parentId ??
+            sync.hydrateProducts?.payload?.[0]?.categories?.[0]?.id;
+        const categoryName = this.capitalizeString(payload.category.trim());
+        const categorySearchResponse = await this.apiClient.post("search/category", {
+            limit: 1,
+            filter: [
+                { type: "equals", field: "name", value: categoryName },
+                { type: "equals", field: "parentId", value: salesChannel.navigationCategoryId },
+            ],
+        });
+        const existingCategory = categorySearchResponse.data.data[0];
+        const savedCategoryId =
+            sync.hydrateCategory?.payload?.[0]?.id ??
+            sync.hydrateProducts?.payload?.[0]?.categories?.[1]?.id;
+        const targetCategoryId = existingCategory?.id || savedCategoryId;
+
+        if (sync.hydrateCategory?.payload?.length) {
+            if (existingCategory) {
+                delete sync.hydrateCategory;
+            } else {
+                sync.hydrateCategory.payload[0].parentId = salesChannel.navigationCategoryId;
+            }
+        }
+
+        for (const product of sync.hydrateProducts?.payload || []) {
+            product.taxId = taxId;
+            product.visibilities = (product.visibilities || []).map(
+                (visibility: Record<string, any>) => ({
+                    ...visibility,
+                    salesChannelId: salesChannel.id,
+                }),
+            );
+            product.price = (product.price || []).map((price: Record<string, any>) => ({
+                ...price,
+                currencyId,
+            }));
+            product.categories = (product.categories || []).map(
+                (category: Record<string, any>) => ({
+                    id:
+                        category.id === oldNavigationCategoryId
+                            ? salesChannel.navigationCategoryId
+                            : targetCategoryId,
+                }),
+            );
+        }
+
+        const response = await this.apiClient.post("_action/sync", sync);
         console.log("Sync Payload Response", response.status);
 
         for (const media of payload.mediaUploads) {

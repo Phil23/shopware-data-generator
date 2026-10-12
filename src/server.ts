@@ -1,4 +1,6 @@
 import express from "express";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { DataHydrator } from "./data-hydrator.js";
 import { DataGenerator } from "./data-generator.js";
 
@@ -50,20 +52,11 @@ app.post("/generate", async (request, response) => {
         return;
     }
 
-    let propertyGroups = null;
-    let products = [];
-
+    let payload;
     try {
         const propertyGroupsData = await dataGenerator.generatePropertyGroups(productCategory);
-        propertyGroups = await dataHydrator.hydrateEnvWithPropertyGroups(propertyGroupsData);
-    } catch (e) {
-        console.error(e);
-        response.status(500).send(e);
-        return;
-    }
-
-    try {
-        products = await dataGenerator.generateProducts(
+        const propertyGroups = dataHydrator.createPropertyGroupsPayload(propertyGroupsData || []);
+        const products = await dataGenerator.generateProducts(
             productCategory,
             productCount,
             propertyGroups,
@@ -72,27 +65,34 @@ app.post("/generate", async (request, response) => {
             200,
             additionalInformation,
         );
+        if (!products?.length) throw new Error("No products could be generated.");
+        payload = await dataHydrator.createSavedPayload(
+            propertyGroups,
+            products,
+            productCategory,
+            salesChannelName,
+        );
+        const payloadDir = path.resolve("generatedPayloads");
+        await fs.mkdir(payloadDir, { recursive: true });
+        const slug =
+            productCategory
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-|-$/g, "") || "demo-data";
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        await fs.writeFile(
+            path.join(payloadDir, `${timestamp}-${slug}.json`),
+            `${JSON.stringify(payload, null, 2)}\n`,
+        );
+        await dataHydrator.applySavedPayload(payload);
     } catch (e) {
         console.error(e);
-        response.status(500).send(e);
-        return;
-    }
-
-    if (!products.length) {
-        response.status(500).send("No products could be generated.");
-        return;
-    }
-
-    try {
-        await dataHydrator.hydrateEnvWithProducts(products, productCategory, salesChannelName);
-    } catch (e) {
-        console.error(e);
-        response.status(500).send(e);
+        response.status(500).send(e instanceof Error ? e.message : e);
         return;
     }
 
     response
         .status(200)
         .type("application/json")
-        .send({ message: "Products generated successfully." });
+        .send({ message: "Products generated successfully.", payloadSaved: true });
 });

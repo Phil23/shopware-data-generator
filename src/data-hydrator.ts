@@ -1,5 +1,15 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { HttpClient } from "./http-client.js";
+
+export type SavedPayload = {
+    version: 1;
+    createdAt: string;
+    category: string;
+    sync: Record<string, any>;
+    mediaUploads: { id: string; file: string; fileName: string; extension: string }[];
+};
 
 export class DataHydrator {
     public apiClient: HttpClient;
@@ -66,6 +76,7 @@ export class DataHydrator {
 
         this.apiClientAccessToken = authResponse.data["access_token"];
         this.apiClient.setHeader("Authorization", `Bearer ${this.apiClientAccessToken}`);
+        return true;
     }
 
     async authenticateWithUserCredentials(envPath: string, userName: string, password: string) {
@@ -131,206 +142,146 @@ export class DataHydrator {
         return salesChannelResponse.data.data[0];
     }
 
-    async createProductCategory(category: string, salesChannel: Record<string, any>) {
-        const categoryName = this.capitalizeString(category.trim());
-
-        const categorySearchResponse = await this.apiClient.post("search/category", {
-            limit: 1,
-            filter: [
-                {
-                    type: "equals",
-                    field: "name",
-                    value: categoryName,
-                },
-                {
-                    type: "equals",
-                    field: "parentId",
-                    value: salesChannel.navigationCategoryId,
-                },
-            ],
-        });
-
-        if (categorySearchResponse.data.total === 1 && categorySearchResponse.data.data[0]) {
-            return categorySearchResponse.data.data[0];
-        }
-
-        const categoryResponse = await this.apiClient.post("category?_response", {
-            name: categoryName,
-            parentId: salesChannel.navigationCategoryId,
-            displayNestedProducts: true,
-            type: "page",
-            productAssignmentType: "product",
-            visible: true,
-            active: true,
-        });
-
-        return categoryResponse.data.data;
-    }
-
-    async hydrateEnvWithPropertyGroups(propertyGroups: Record<string, any>[]) {
-        if (!this.apiClientAccessToken) {
-            console.error("Client is not authenticated.");
-            return [];
-        }
-
-        const propertyGroupsPayload = propertyGroups.map((group) => {
-            return {
+    createPropertyGroupsPayload(propertyGroups: Record<string, any>[]) {
+        return propertyGroups.map((group) => ({
+            id: this.createUUID(),
+            name: group.name,
+            description: group.description,
+            displayType: group.displayType,
+            options: group.options.map((option: Record<string, any>) => ({
                 id: this.createUUID(),
-                name: group.name,
-                description: group.description,
-                displayType: group.displayType,
-                options: group.options.map((option: Record<string, any>[]) => {
-                    return {
-                        id: this.createUUID(),
-                        ...option,
-                    };
-                }),
-            };
-        });
-
-        const propertyGroupResponse = await this.apiClient.post("_action/sync", {
-            hydratePropertyGroups: {
-                entity: "property_group",
-                action: "upsert",
-                payload: propertyGroupsPayload,
-            },
-        });
-
-        console.log("Property Group Response", propertyGroupResponse.status);
-
-        return propertyGroupsPayload;
+                ...option,
+            })),
+        }));
     }
 
-    async hydrateEnvWithProducts(
-        products: Record<string, any>,
+    async createSavedPayload(
+        propertyGroups: Record<string, any>[],
+        products: Record<string, any>[],
         category: string,
         salesChannelName: string = "Storefront",
-    ) {
+    ): Promise<SavedPayload> {
         if (!this.apiClientAccessToken) {
-            console.error("Client is not authenticated.");
-            return false;
+            throw new Error("Client is not authenticated.");
         }
 
         const taxId = await this.getStandardTaxId();
         const salesChannel = await this.getStandardSalesChannel(salesChannelName);
+        const currencyId = salesChannel.currencyId || (await this.getCurrencyId());
+        const categoryName = this.capitalizeString(category.trim());
+        const categorySearchResponse = await this.apiClient.post("search/category", {
+            limit: 1,
+            filter: [
+                { type: "equals", field: "name", value: categoryName },
+                { type: "equals", field: "parentId", value: salesChannel.navigationCategoryId },
+            ],
+        });
+        const existingCategory = categorySearchResponse.data.data[0];
+        const productCategory = existingCategory
+            ? { id: existingCategory.id }
+            : {
+                  id: this.createUUID(),
+                  name: categoryName,
+                  parentId: salesChannel.navigationCategoryId,
+                  displayNestedProducts: true,
+                  type: "page",
+                  productAssignmentType: "product",
+                  visible: true,
+                  active: true,
+              };
 
-        let currencyId = salesChannel.currencyId;
-
-        if (!currencyId) {
-            currencyId = await this.getCurrencyId();
-        }
-
-        const productCategory = await this.createProductCategory(category, salesChannel);
-
-        const mediaUploads: Record<string, any> = [];
-        const mediaPayload: Record<string, any> = [];
-        const productPayload = products.map((p: Record<string, any>) => {
-            const UUID = this.createUUID();
-
+        const mediaUploads: SavedPayload["mediaUploads"] = [];
+        const productPayload = products.map((p) => {
+            const id = this.createUUID();
             const product: Record<string, any> = {
-                id: UUID,
-                productNumber: `AI-${UUID}`,
+                id,
+                productNumber: `AI-${id}`,
                 name: p.name,
                 description: p.description,
                 stock: p.stock,
-                taxId: taxId,
-                price: [
-                    {
-                        currencyId: currencyId,
-                        gross: p.price,
-                        net: p.price,
-                        linked: true,
-                    },
-                ],
-                visibilities: [
-                    {
-                        productId: UUID,
-                        salesChannelId: salesChannel.id,
-                        visibility: 30,
-                    },
-                ],
-                categories: [
-                    {
-                        id: salesChannel.navigationCategoryId,
-                    },
-                    {
-                        id: productCategory.id,
-                    },
-                ],
+                taxId,
+                price: [{ currencyId, gross: p.price, net: p.price, linked: true }],
+                visibilities: [{ productId: id, salesChannelId: salesChannel.id, visibility: 30 }],
+                categories: [{ id: salesChannel.navigationCategoryId }, { id: productCategory.id }],
             };
 
             if (p.productReviews) {
-                product.productReviews = p.productReviews.map((review: Record<string, any>) => {
-                    review.salesChannelId = salesChannel.id;
-                    return review;
-                });
+                product.productReviews = p.productReviews.map((review: Record<string, any>) => ({
+                    ...review,
+                    salesChannelId: salesChannel.id,
+                }));
             }
-
-            if (p.options) {
-                product.properties = p.options.map((option: Record<string, any>) => {
-                    return {
-                        id: option.id,
-                    };
-                });
-            }
+            if (p.options)
+                product.properties = p.options.map((option: Record<string, any>) => ({
+                    id: option.id,
+                }));
 
             if (p.image) {
                 const mediaId = this.createUUID();
                 const productMediaId = this.createUUID();
-
+                const imageFile = path.join(
+                    "generatedImages",
+                    category.replace(/[^a-zA-Z]/g, ""),
+                    `${p.image.name}${p.image.type}`,
+                );
+                fs.mkdirSync(path.dirname(imageFile), { recursive: true });
+                if (!fs.existsSync(imageFile)) {
+                    fs.writeFileSync(imageFile, p.image.data, "base64");
+                }
                 mediaUploads.push({
                     id: mediaId,
-                    image: p.image,
+                    file: imageFile,
+                    fileName: `${p.image.name}-${mediaId}`,
+                    extension: p.image.type.replace(/^\./, ""),
                 });
-
-                mediaPayload.push({
-                    id: mediaId,
-                    private: false,
-                });
-
                 product.coverId = productMediaId;
-                product.media = [
-                    {
-                        id: productMediaId,
-                        media: {
-                            id: mediaId,
-                        },
-                    },
-                ];
+                product.media = [{ id: productMediaId, media: { id: mediaId } }];
             }
-
             return product;
         });
 
-        const productResponse = await this.apiClient.post("_action/sync", {
-            hydrateProducts: {
-                entity: "product",
+        const sync: Record<string, any> = {};
+        if (!existingCategory) {
+            sync["hydrateCategory"] = {
+                entity: "category",
                 action: "upsert",
-                payload: productPayload,
+                payload: [productCategory],
+            };
+        }
+        Object.assign(sync, {
+            hydratePropertyGroups: {
+                entity: "property_group",
+                action: "upsert",
+                payload: propertyGroups,
             },
+            hydrateProducts: { entity: "product", action: "upsert", payload: productPayload },
             hydrateMedia: {
                 entity: "media",
                 action: "upsert",
-                payload: mediaPayload,
+                payload: mediaUploads.map(({ id }) => ({ id, private: false })),
             },
         });
 
-        console.log("Product Create Response", productResponse.status);
+        return { version: 1, createdAt: new Date().toISOString(), category, sync, mediaUploads };
+    }
 
-        const mediaResponse = await Promise.all(
-            mediaUploads.map(async (media: Record<string, any>) => {
-                return await this.apiClient.post(
-                    `_action/media/${media.id}/upload?extension=png&fileName=${media.image.name}-${media.id}`,
-                    Buffer.from(media.image.data, "base64"),
-                    {
-                        headers: {
-                            "Content-Type": "image/png",
-                        },
-                    },
-                );
-            }),
-        );
+    async applySavedPayload(payload: SavedPayload) {
+        if (!this.apiClientAccessToken) throw new Error("Client is not authenticated.");
+        if (payload.version !== 1)
+            throw new Error(`Unsupported payload version: ${payload.version}`);
 
-        return productResponse.status;
+        const response = await this.apiClient.post("_action/sync", payload.sync);
+        console.log("Sync Payload Response", response.status);
+
+        for (const media of payload.mediaUploads) {
+            const imagePath = path.resolve(media.file);
+            if (!fs.existsSync(imagePath)) throw new Error(`Image file is missing: ${imagePath}`);
+            await this.apiClient.post(
+                `_action/media/${media.id}/upload?extension=${encodeURIComponent(media.extension)}&fileName=${encodeURIComponent(media.fileName)}`,
+                fs.readFileSync(imagePath),
+                { headers: { "Content-Type": `image/${media.extension}` } },
+            );
+        }
+        return response.status;
     }
 }

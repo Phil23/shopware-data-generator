@@ -17,6 +17,7 @@
         "format": "prettier --write .",
         "check-format": "prettier --check .",
         "generate": "node --env-file=.env dist/main.js",
+        "apply": "node --env-file=.env dist/main.js apply",
         "server": "node --env-file=.env dist/server.js"
     },
     "dependencies": {

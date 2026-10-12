@@ -38,6 +38,16 @@ You can then generate products simply calling the following command, including t
 npm run generate --category="furniture"
 ```
 
+Each generation saves the Shopware sync payload as a JSON file in `generatedPayloads/` before applying it. Product images remain in `generatedImages/`; the saved payload references those files, so keep the payload and image directory together when moving replay data to another machine.
+
+To apply a saved payload again without calling OpenAI, run:
+
+```
+npm run apply
+```
+
+The command displays the saved payloads and prompts for a selection. It uses the `SW_ENV_URL`, `SW_CLIENT_ID`, and `SW_CLIENT_SECRET` values from `.env` (or the development credential fallback described above). Applying the same payload again upserts the same entity IDs.
+
 ## Usage via Server
 
 The data generator can be used as a service to hydrate different environments via server request. To run the server you can call the following command:

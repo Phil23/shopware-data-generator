@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
-import axios, { type AxiosInstance } from "axios";
+import { HttpClient } from "./http-client.js";
 
 export class DataHydrator {
-    public apiClient: AxiosInstance;
+    public apiClient: HttpClient;
     public envPath: string | undefined;
     public authenticationType: string | undefined;
 
@@ -13,7 +13,7 @@ export class DataHydrator {
     private apiClientAccessToken: string | null | undefined;
 
     constructor() {
-        this.apiClient = axios.create();
+        this.apiClient = new HttpClient();
     }
 
     createUUID() {
@@ -36,9 +36,7 @@ export class DataHydrator {
         this.apiClientSecret = clientSecret;
         this.authenticationType = "client";
 
-        this.apiClient = axios.create({
-            baseURL: `${this.envPath}/api/`,
-        });
+        this.apiClient = new HttpClient(`${this.envPath}/api/`);
 
         if (this.apiClientId && this.apiClientSecret) {
             authResponse = await this.apiClient.post("oauth/token", {
@@ -67,8 +65,7 @@ export class DataHydrator {
         }
 
         this.apiClientAccessToken = authResponse.data["access_token"];
-        this.apiClient.defaults.headers.common["Authorization"] =
-            "Bearer " + this.apiClientAccessToken;
+        this.apiClient.setHeader("Authorization", `Bearer ${this.apiClientAccessToken}`);
     }
 
     async authenticateWithUserCredentials(envPath: string, userName: string, password: string) {
@@ -82,9 +79,7 @@ export class DataHydrator {
         this.password = password;
         this.authenticationType = "user";
 
-        this.apiClient = axios.create({
-            baseURL: `${this.envPath}/api/`,
-        });
+        this.apiClient = new HttpClient(`${this.envPath}/api/`);
 
         const authResponse = await this.apiClient.post("oauth/token", {
             client_id: "administration",
@@ -100,8 +95,7 @@ export class DataHydrator {
         }
 
         this.apiClientAccessToken = authResponse.data["access_token"];
-        this.apiClient.defaults.headers.common["Authorization"] =
-            "Bearer " + this.apiClientAccessToken;
+        this.apiClient.setHeader("Authorization", `Bearer ${this.apiClientAccessToken}`);
         return true;
     }
 

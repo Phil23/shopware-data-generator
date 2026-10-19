@@ -284,6 +284,26 @@ export class DataHydrator {
         const salesChannel = await this.getStandardSalesChannel(
             payload.salesChannelName || "Storefront",
         );
+        if (!salesChannel) {
+            throw new Error(
+                `Sales channel "${payload.salesChannelName || "Storefront"}" was not found.`,
+            );
+        }
+        if (!salesChannel.navigationCategoryId) {
+            throw new Error(
+                `Sales channel "${payload.salesChannelName || "Storefront"}" has no navigation category.`,
+            );
+        }
+        const navigationCategoryResponse = await this.apiClient.post("search/category", {
+            limit: 1,
+            filter: [{ type: "equals", field: "id", value: salesChannel.navigationCategoryId }],
+        });
+        const navigationCategory = navigationCategoryResponse.data.data[0];
+        if (!navigationCategory) {
+            throw new Error(
+                `Navigation category ${salesChannel.navigationCategoryId} for sales channel "${payload.salesChannelName || "Storefront"}" was not found.`,
+            );
+        }
         const taxId = await this.getStandardTaxId();
         const currencyId = salesChannel.currencyId || (await this.getCurrencyId());
         const oldNavigationCategoryId =
@@ -301,14 +321,30 @@ export class DataHydrator {
         const savedCategoryId =
             sync.hydrateCategory?.payload?.[0]?.id ??
             sync.hydrateProducts?.payload?.[0]?.categories?.[1]?.id;
+        if (!existingCategory && !savedCategoryId) {
+            throw new Error("The saved payload does not contain a category ID.");
+        }
         const targetCategoryId = existingCategory?.id || savedCategoryId;
 
-        if (sync.hydrateCategory?.payload?.length) {
-            if (existingCategory) {
-                delete sync.hydrateCategory;
-            } else {
-                sync.hydrateCategory.payload[0].parentId = salesChannel.navigationCategoryId;
-            }
+        if (existingCategory) {
+            delete sync.hydrateCategory;
+        } else {
+            const category = sync.hydrateCategory?.payload?.[0] || {
+                id: savedCategoryId,
+                name: categoryName,
+                displayNestedProducts: true,
+                type: "page",
+                productAssignmentType: "product",
+                visible: true,
+                active: true,
+            };
+            category.parentId = navigationCategory.id;
+            category.parentVersionId = navigationCategory.versionId;
+            sync.hydrateCategory = {
+                entity: "category",
+                action: "upsert",
+                payload: [category],
+            };
         }
 
         for (const product of sync.hydrateProducts?.payload || []) {
@@ -316,6 +352,12 @@ export class DataHydrator {
             product.visibilities = (product.visibilities || []).map(
                 (visibility: Record<string, any>) => ({
                     ...visibility,
+                    salesChannelId: salesChannel.id,
+                }),
+            );
+            product.productReviews = (product.productReviews || []).map(
+                (review: Record<string, any>) => ({
+                    ...review,
                     salesChannelId: salesChannel.id,
                 }),
             );
